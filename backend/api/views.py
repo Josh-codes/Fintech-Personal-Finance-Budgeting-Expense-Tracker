@@ -1,34 +1,60 @@
 from django.shortcuts import render
 from django.contrib.auth.models import User
-from .serializers import UserSerializer, NoteSerializer
 from rest_framework import generics
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import Note
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.exceptions import ValidationError
 
-# Create your views here.
+from .models import Note, FinancialRecord, Transaction
+from .serializers import UserSerializer, NoteSerializer, FinancialRecordSerializer, TransactionSerializer
+
+# User Registration
 class CreateUser(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
 
-class CreateNotelist(generics.ListCreateAPIView):
-    serializer_class = NoteSerializer
-    permission_classes =[IsAuthenticated]
+# Create Financial Record
+class CreateFinancialRecord(generics.CreateAPIView):
+    queryset = FinancialRecord.objects.all()
+    serializer_class = FinancialRecordSerializer
+    permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        return Note.objects.filter(author=user)
-    
     def perform_create(self, serializer):
-        if serializer.is_valid():
-            serializer.save(author=self.request.user)
-        else:
-            print(serializer.errors)
+        serializer.save(user=self.request.user)
 
-class DeleteNote(generics.DestroyAPIView):
-    serializer_class = NoteSerializer
-    permission_classes =[IsAuthenticated]
-    
+# Add Transaction
+class AddTransaction(generics.CreateAPIView):
+    queryset = Transaction.objects.all()
+    serializer_class = TransactionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        financial_record_id = self.request.data.get('financial_record')
+        try:
+            financial_record = FinancialRecord.objects.get(id=financial_record_id, user=self.request.user)
+        except FinancialRecord.DoesNotExist:
+            raise ValidationError("Financial Record not found or you don't have permission.")
+        
+        serializer.save(financial_record=financial_record)
+
+# Delete Transaction
+class DeleteTransaction(generics.DestroyAPIView):
+    queryset = Transaction.objects.all()
+    serializer_class = TransactionSerializer
+    permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
-        user = self.request.user
-        return Note.objects.filter(author=user)
+        # Only allow deletion of user's transactions
+        return Transaction.objects.filter(financial_record__user=self.request.user)
+    
+class FetchFinancialRecordView(APIView):
+    permission_classes = [IsAuthenticated]  # Ensure the user is authenticated
+
+    def post(self, request, *args, **kwargs):
+        # You can customize this to filter records based on user or other parameters
+        financial_records = FinancialRecord.objects.filter(user=request.user)  # Assuming you want to fetch the records of the logged-in user
+        serializer = FinancialRecordSerializer(financial_records, many=True)
+        return Response(serializer.data)

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Note
+from .models import Note, Transaction, FinancialRecord
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta():
@@ -27,3 +27,17 @@ class NoteSerializer(serializers.Serializer):
             "author",
         ]
         extra_kwargs = {"author":{"read_only": True}}
+
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = '_all_'
+        read_only_fields = ('financial_record', 'date')
+
+class FinancialRecordSerializer(serializers.ModelSerializer):
+    transactions = TransactionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = FinancialRecord
+        fields = '__all__'  # Corrected from '_all_' to '__all__'
+        read_only_fields = ('investments_amount', 'savings_amount', 'user', 'created_at', 'remaining_budget')
